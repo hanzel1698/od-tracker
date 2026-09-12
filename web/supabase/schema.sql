@@ -104,12 +104,26 @@ create trigger letter_settings_touch_updated_at
 -- Table privileges.
 --
 -- The app only ever reads and writes as a signed-in user, so the anonymous
--- role needs no access at all. Policies below narrow this further; a grant on
--- its own grants nothing while RLS is on.
+-- role needs no access at all, and `authenticated` should hold exactly the
+-- operations the policies below contemplate - no DELETE on letter_settings,
+-- in particular.
+--
+-- Reaching that state takes a full revoke first, for two reasons. Supabase's
+-- default privileges hand new tables in `public` to anon and authenticated, so
+-- a bare `grant` adds nothing and leaves the surplus in place. And some of
+-- those privileges arrive via the PUBLIC pseudo-role, which every role
+-- inherits - revoking from `anon` by name does not take them away.
+--
+-- service_role is deliberately left alone: the platform and any future
+-- server-side job rely on it, and it is never exposed to the browser.
+--
+-- With RLS on, a surplus grant leaks nothing by itself - anon has no policy to
+-- match and auth.uid() is null for it. This is the second line of defence
+-- behind the policies, not the first.
 -- ---------------------------------------------------------------------------
-revoke all on public.od_accounts     from anon;
-revoke all on public.od_transactions from anon;
-revoke all on public.letter_settings from anon;
+revoke all on public.od_accounts     from public, anon, authenticated;
+revoke all on public.od_transactions from public, anon, authenticated;
+revoke all on public.letter_settings from public, anon, authenticated;
 
 grant select, insert, update, delete on public.od_accounts     to authenticated;
 grant select, insert, update, delete on public.od_transactions to authenticated;
