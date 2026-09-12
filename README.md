@@ -2,6 +2,8 @@
 
 A modern native Android application built with **Jetpack Compose**, **Kotlin**, and **Room Database** to track Overdrafts (ODs) taken against Fixed Deposits (FDs).
 
+There is also a **[web version](web/)** with the same features, backed by Supabase so the data follows you across devices.
+
 ## Features
 
 - **Overdraft & Fixed Deposit Tracking**:
@@ -52,3 +54,20 @@ Clone the repository and build the project using the Gradle wrapper:
 # Assemble Release APK
 ./gradlew assembleRelease
 ```
+
+## Web App
+
+[`web/`](web/) holds a React + TypeScript port that runs in the browser, stores data in
+Supabase (Postgres, with row-level security scoping every row to its owner) and deploys
+to Netlify as a static site. It carries the same overdraft arithmetic and the same bank
+closure request letter, and because the data lives server-side rather than in a local
+Room database, the same account opens on every device you sign in from.
+
+```bash
+cd web
+npm install
+cp .env.example .env.local   # add your Supabase URL and anon key
+npm run dev
+```
+
+See [`web/README.md`](web/README.md) for the Supabase schema setup and Netlify deployment steps.
