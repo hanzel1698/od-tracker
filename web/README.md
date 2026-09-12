@@ -69,7 +69,22 @@ npm run dev       # http://localhost:5173
 | `npm test`          | Run the unit tests once               |
 | `npm run typecheck` | Types only, no build                  |
 
-## Deploying to Netlify
+## Deploying
+
+The build is a plain static bundle — no serverless functions, no server-side
+rendering, nothing host-specific. Anything that can serve a directory and fall
+back to `index.html` will do, so the host below is a default rather than a
+dependency.
+
+`public/_redirects` and `public/_headers` ship the SPA fallback and security
+headers in the format Netlify and Cloudflare Pages both read, and Vite copies
+them into `dist/` on every build.
+
+Whichever host you use, the two Supabase variables must be set **at build
+time** — Vite inlines them into the bundle, so changing them means a fresh
+deploy, not just a restart.
+
+### Netlify
 
 [`netlify.toml`](netlify.toml) already sets the base directory, build command,
 publish directory, SPA fallback redirect and cache headers.
@@ -82,9 +97,28 @@ publish directory, SPA fallback redirect and cache headers.
    needs a redeploy to take effect.
 4. Deploy.
 
-Back in Supabase, add the deployed origin under **Authentication → URL
-Configuration** (Site URL, and Redirect URLs) so email confirmation links return
-to the right place.
+### Cloudflare Pages
+
+A free alternative with no build-minute metering on the free plan, which is
+useful if a Netlify billing cycle pauses production deploys.
+
+1. **Workers & Pages → Create → Pages → Connect to Git**, and pick this repository.
+2. Build settings:
+   - Framework preset: **None** (or Vite)
+   - Root directory: `web`
+   - Build command: `npm run build`
+   - Build output directory: `dist`
+3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under the project's
+   environment variables, for the Production environment.
+4. Deploy. `_redirects` handles the SPA fallback; there is nothing to configure
+   for it.
+
+### Afterwards, in Supabase
+
+Whichever host you land on, add the deployed origin under **Authentication →
+URL Configuration** (Site URL, and Redirect URLs) so email confirmation links
+return to the right place. Add `http://localhost:5173` too, for local
+development — the default Site URL is port 3000, which Vite does not use.
 
 ## How it maps to the Android app
 
