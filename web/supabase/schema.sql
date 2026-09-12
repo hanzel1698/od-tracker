@@ -5,9 +5,12 @@
 --   Supabase dashboard -> SQL Editor -> paste -> Run
 --   (or `supabase db push` if you use the CLI)
 --
+-- Safe to re-run: every statement is idempotent, and re-running it against an
+-- already-provisioned project is a no-op rather than a second set of policies.
+--
 -- Every table is owned row-by-row by an auth.users id and guarded by row-level
--- security, so the browser's anon key can only ever reach the signed-in user's
--- own data.
+-- security, so the browser's publishable/anon key can only ever reach the
+-- signed-in user's own data.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -35,6 +38,8 @@ create index if not exists od_accounts_user_id_idx on public.od_accounts (user_i
 --   WITHDRAWAL  funds taken out of the OD      -> increases outstanding
 --   REPAYMENT   funds paid back into the OD    -> decreases outstanding
 --   INTEREST    monthly interest debit by bank -> increases outstanding
+--
+-- Amounts are always positive; the sign is carried by `type`, never the number.
 -- ---------------------------------------------------------------------------
 create table if not exists public.od_transactions (
     id         uuid primary key default gen_random_uuid(),
@@ -68,10 +73,15 @@ create table if not exists public.letter_settings (
 
 -- ---------------------------------------------------------------------------
 -- Keep updated_at honest without the client having to set it.
+--
+-- search_path is pinned: an unqualified function called from a trigger body
+-- would otherwise resolve against whatever search_path the caller happens to
+-- carry. Supabase's security advisor flags the unpinned form.
 -- ---------------------------------------------------------------------------
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = pg_catalog
 as $$
 begin
     new.updated_at = now();
@@ -79,6 +89,7 @@ begin
 end;
 $$;
 
+-- od_transactions is append-and-delete only, so it carries no updated_at.
 drop trigger if exists od_accounts_touch_updated_at on public.od_accounts;
 create trigger od_accounts_touch_updated_at
     before update on public.od_accounts
@@ -90,47 +101,75 @@ create trigger letter_settings_touch_updated_at
     for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- Table privileges.
+--
+-- The app only ever reads and writes as a signed-in user, so the anonymous
+-- role needs no access at all. Policies below narrow this further; a grant on
+-- its own grants nothing while RLS is on.
+-- ---------------------------------------------------------------------------
+revoke all on public.od_accounts     from anon;
+revoke all on public.od_transactions from anon;
+revoke all on public.letter_settings from anon;
+
+grant select, insert, update, delete on public.od_accounts     to authenticated;
+grant select, insert, update, delete on public.od_transactions to authenticated;
+grant select, insert, update         on public.letter_settings to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Row level security: a user sees and writes only their own rows.
 -- ---------------------------------------------------------------------------
 alter table public.od_accounts     enable row level security;
 alter table public.od_transactions enable row level security;
 alter table public.letter_settings enable row level security;
 
-drop policy if exists "own accounts: select" on public.od_accounts;
-create policy "own accounts: select" on public.od_accounts
-    for select using (auth.uid() = user_id);
-
-drop policy if exists "own accounts: insert" on public.od_accounts;
-create policy "own accounts: insert" on public.od_accounts
-    for insert with check (auth.uid() = user_id);
-
-drop policy if exists "own accounts: update" on public.od_accounts;
-create policy "own accounts: update" on public.od_accounts
-    for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
-drop policy if exists "own accounts: delete" on public.od_accounts;
-create policy "own accounts: delete" on public.od_accounts
-    for delete using (auth.uid() = user_id);
-
+-- Earlier revisions of this file used descriptive policy names. Drop them so a
+-- project provisioned from that version does not end up carrying two parallel
+-- sets of policies.
+drop policy if exists "own accounts: select"     on public.od_accounts;
+drop policy if exists "own accounts: insert"     on public.od_accounts;
+drop policy if exists "own accounts: update"     on public.od_accounts;
+drop policy if exists "own accounts: delete"     on public.od_accounts;
 drop policy if exists "own transactions: select" on public.od_transactions;
-create policy "own transactions: select" on public.od_transactions
-    for select using (auth.uid() = user_id);
-
--- The extra od_accounts lookup stops a caller from stapling a transaction onto
--- somebody else's overdraft by passing a foreign od_id.
 drop policy if exists "own transactions: insert" on public.od_transactions;
-create policy "own transactions: insert" on public.od_transactions
-    for insert with check (
-        auth.uid() = user_id
-        and exists (
-            select 1 from public.od_accounts a
-            where a.id = od_id and a.user_id = auth.uid()
-        )
-    );
-
 drop policy if exists "own transactions: update" on public.od_transactions;
-create policy "own transactions: update" on public.od_transactions
-    for update using (auth.uid() = user_id) with check (
+drop policy if exists "own transactions: delete" on public.od_transactions;
+drop policy if exists "own settings: select"     on public.letter_settings;
+drop policy if exists "own settings: insert"     on public.letter_settings;
+drop policy if exists "own settings: update"     on public.letter_settings;
+
+drop policy if exists od_accounts_select_own on public.od_accounts;
+create policy od_accounts_select_own on public.od_accounts
+    for select to authenticated
+    using (auth.uid() = user_id);
+
+drop policy if exists od_accounts_insert_own on public.od_accounts;
+create policy od_accounts_insert_own on public.od_accounts
+    for insert to authenticated
+    with check (auth.uid() = user_id);
+
+drop policy if exists od_accounts_update_own on public.od_accounts;
+create policy od_accounts_update_own on public.od_accounts
+    for update to authenticated
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+drop policy if exists od_accounts_delete_own on public.od_accounts;
+create policy od_accounts_delete_own on public.od_accounts
+    for delete to authenticated
+    using (auth.uid() = user_id);
+
+drop policy if exists od_transactions_select_own on public.od_transactions;
+create policy od_transactions_select_own on public.od_transactions
+    for select to authenticated
+    using (auth.uid() = user_id);
+
+-- Owning the row is not enough on write: without the parent lookup, a caller
+-- could staple a transaction onto somebody else's overdraft by passing a
+-- foreign od_id.
+drop policy if exists od_transactions_insert_own_account on public.od_transactions;
+create policy od_transactions_insert_own_account on public.od_transactions
+    for insert to authenticated
+    with check (
         auth.uid() = user_id
         and exists (
             select 1 from public.od_accounts a
@@ -138,24 +177,51 @@ create policy "own transactions: update" on public.od_transactions
         )
     );
 
-drop policy if exists "own transactions: delete" on public.od_transactions;
-create policy "own transactions: delete" on public.od_transactions
-    for delete using (auth.uid() = user_id);
+drop policy if exists od_transactions_update_own_account on public.od_transactions;
+create policy od_transactions_update_own_account on public.od_transactions
+    for update to authenticated
+    using (
+        auth.uid() = user_id
+        and exists (
+            select 1 from public.od_accounts a
+            where a.id = od_id and a.user_id = auth.uid()
+        )
+    )
+    with check (
+        auth.uid() = user_id
+        and exists (
+            select 1 from public.od_accounts a
+            where a.id = od_id and a.user_id = auth.uid()
+        )
+    );
 
-drop policy if exists "own settings: select" on public.letter_settings;
-create policy "own settings: select" on public.letter_settings
-    for select using (auth.uid() = user_id);
+drop policy if exists od_transactions_delete_own on public.od_transactions;
+create policy od_transactions_delete_own on public.od_transactions
+    for delete to authenticated
+    using (auth.uid() = user_id);
 
-drop policy if exists "own settings: insert" on public.letter_settings;
-create policy "own settings: insert" on public.letter_settings
-    for insert with check (auth.uid() = user_id);
+drop policy if exists letter_settings_select_own on public.letter_settings;
+create policy letter_settings_select_own on public.letter_settings
+    for select to authenticated
+    using (auth.uid() = user_id);
 
-drop policy if exists "own settings: update" on public.letter_settings;
-create policy "own settings: update" on public.letter_settings
-    for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- Insert and update both exist because the app upserts these on user_id, and
+-- PostgREST's upsert needs both. There is deliberately no delete policy: these
+-- rows go away with the user, via the cascade.
+drop policy if exists letter_settings_insert_own on public.letter_settings;
+create policy letter_settings_insert_own on public.letter_settings
+    for insert to authenticated
+    with check (auth.uid() = user_id);
+
+drop policy if exists letter_settings_update_own on public.letter_settings;
+create policy letter_settings_update_own on public.letter_settings
+    for update to authenticated
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
 -- Realtime: let other signed-in devices pick up changes as they happen.
+-- letter_settings is deliberately left out; it has nothing to stream.
 -- ---------------------------------------------------------------------------
 do $$
 begin

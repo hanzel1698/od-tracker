@@ -27,8 +27,10 @@ restrict each row to the user who owns it.
 
 1. Start a project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql),
-   and run it. That creates the three tables, their policies, the `updated_at`
-   triggers, and the realtime publication.
+   and run it. That creates the three tables, their grants and policies, the
+   `updated_at` triggers, and the realtime publication. Every statement is
+   idempotent, so re-running it against an already-provisioned project is a
+   no-op rather than a second set of policies.
 3. Under **Authentication → Providers**, keep **Email** enabled. If you would
    rather not round-trip a confirmation email for your own account, turn off
    "Confirm email" there.
@@ -39,11 +41,18 @@ restrict each row to the user who owns it.
 cd web
 cp .env.example .env.local
 # fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from
-# Project Settings -> Data API / API Keys
+# Project Settings -> API Keys
 ```
 
-Both values are meant to ship in the browser bundle. The anon key grants only
-what the row-level security policies allow.
+`VITE_SUPABASE_ANON_KEY` takes either the current **publishable** key
+(`sb_publishable_…`) or a legacy **anon** key — the variable name predates
+Supabase's rename, and supabase-js accepts both. Prefer the publishable key on
+a new project.
+
+Both values are meant to ship in the browser bundle. Neither grants anything
+beyond what the row-level security policies allow, and the anonymous role has
+had its table privileges revoked outright. Never put a `service_role` or
+`sb_secret_…` key in the app.
 
 ### 3. Run it
 
