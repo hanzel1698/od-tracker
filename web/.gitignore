@@ -1,10 +1,11 @@
 node_modules/
 dist/
-dist-ssr/
 .env
 .env.local
 .env.*.local
 *.tsbuildinfo
-.netlify/
 .vite/
 npm-debug.log*
+
+# Contains real account numbers. Run it by hand in the Supabase SQL editor.
+supabase/seed.local.sql

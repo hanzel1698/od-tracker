@@ -1,156 +1,108 @@
-# OD Tracker — Web
+# OD Tracker (web)
 
-The browser version of the [OD Tracker](../README.md) Android app: track overdrafts
-taken against fixed deposits, log transfers, and generate the bank closure request
-letter. Same data model and same arithmetic as the Android app, with the data in
-Supabase instead of a local Room database, so the same account is available on
-every device you sign in from.
+A personal web app for SBI overdrafts taken against fixed deposits. It tracks every
+OD, the FDs under lien, a money ledger per OD, and each OD's lifecycle: opened → drawn
+→ renewed (possibly many times) → closure requested → closed → lien released.
+
+Static React SPA on GitHub Pages, data in Supabase (Postgres + Auth), every table
+fenced by row-level security.
 
 ## Stack
 
-| Concern        | Choice                                                       |
-| -------------- | ------------------------------------------------------------ |
-| UI             | React 19 + TypeScript, hand-written CSS (Material 3 palette)  |
-| Build          | Vite 7                                                        |
-| Data & auth    | Supabase (Postgres + Auth + Realtime), guarded by row-level security |
-| Server state   | TanStack Query, invalidated by Supabase realtime events       |
-| Closure letter | pdf-lib, rendered in the browser and code-split out of the main bundle |
-| Hosting        | Netlify (static SPA — no server or serverless function needed) |
-
-There is no backend of our own. The browser talks to Supabase directly with the
-anon key, and every table is fenced off by row-level security policies that
-restrict each row to the user who owns it.
+Vite + React 18 + TypeScript · Tailwind CSS 4 · supabase-js v2 · TanStack Query ·
+React Hook Form + Zod · React Router (`HashRouter`) · date-fns · Recharts · Vitest.
 
 ## Setup
 
-### 1. Create the Supabase project
+### 1. Create the Supabase project and run the migration
 
-1. Start a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql),
-   and run it. That creates the three tables, their grants and policies, the
-   `updated_at` triggers, and the realtime publication. Every statement is
-   idempotent, so re-running it against an already-provisioned project is a
-   no-op rather than a second set of policies.
-3. Under **Authentication → Providers**, keep **Email** enabled. If you would
-   rather not round-trip a confirmation email for your own account, turn off
-   "Confirm email" there.
+1. Create a project at [supabase.com](https://supabase.com) (or reuse one with no
+   conflicting tables — the migration creates `od_accounts`, `od_transactions` and others in `public`).
+2. **SQL Editor** → paste [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → **Run**.
+   It creates the enums, tables, RLS policies, integrity triggers, the
+   `od_balances` / `od_alerts` / `od_summary` views and the workflow functions.
 
-### 2. Point the app at it
+### 2. Sign up, then disable sign-ups
+
+1. Run the app locally (step 4) or deploy it (step 5), and use **Create the account** on the login screen.
+   If email confirmation is on, confirm via the email.
+2. Supabase → **Authentication → Sign In / Providers** → turn off **Allow new users to sign up**.
+   The site is public; from now on nobody else can create an account.
+3. **Authentication → URL Configuration**: set the Site URL to your Pages URL
+   (`https://<user>.github.io/od-tracker/`) and add `http://localhost:5173/od-tracker/` as a redirect URL.
+
+### 3. Load your data
+
+`supabase/seed.local.sql` is **gitignored** (it holds real account numbers). Open it,
+replace `MY_EMAIL` with your login email, paste it into the SQL Editor and run it.
+It refuses to run twice. On first login the dashboard offers **Set opening balances**:
+enter what you owe on each active OD (from YONO) and it records `opening_balance` entries.
+
+### 4. Run locally
 
 ```bash
 cd web
-cp .env.example .env.local
-# fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from
-# Project Settings -> API Keys
-```
-
-`VITE_SUPABASE_ANON_KEY` takes either the current **publishable** key
-(`sb_publishable_…`) or a legacy **anon** key — the variable name predates
-Supabase's rename, and supabase-js accepts both. Prefer the publishable key on
-a new project.
-
-Both values are meant to ship in the browser bundle. Neither grants anything
-beyond what the row-level security policies allow, and the anonymous role has
-had its table privileges revoked outright. Never put a `service_role` or
-`sb_secret_…` key in the app.
-
-### 3. Run it
-
-```bash
+cp .env.example .env.local      # fill in URL and publishable key (Project Settings → API Keys)
 npm install
-npm run dev       # http://localhost:5173
+npm run dev                     # http://localhost:5173/od-tracker/
 ```
 
-| Script              | What it does                          |
-| ------------------- | ------------------------------------- |
-| `npm run dev`       | Vite dev server with hot reload       |
-| `npm run build`     | Typecheck, then build to `dist/`      |
-| `npm run preview`   | Serve the production build locally    |
-| `npm test`          | Run the unit tests once               |
-| `npm run typecheck` | Types only, no build                  |
+### 5. Deploy to GitHub Pages
 
-## Deploying
+1. Repo **Settings → Secrets and variables → Actions** → add
+   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the publishable `sb_publishable_…` key, or the legacy anon key).
+2. Repo **Settings → Pages** → **Source: GitHub Actions**.
+3. Push to `main`. [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) runs the tests,
+   builds with `base: '/od-tracker/'` and publishes `web/dist`.
 
-The build is a plain static bundle — no serverless functions, no server-side
-rendering, nothing host-specific. Anything that can serve a directory and fall
-back to `index.html` will do, so the host below is a default rather than a
-dependency.
+Never commit `.env*` files, and never use the `service_role` / secret key in the frontend.
 
-`public/_redirects` and `public/_headers` ship the SPA fallback and security
-headers in the format Netlify and Cloudflare Pages both read, and Vite copies
-them into `dist/` on every build.
+## Scripts
 
-Whichever host you use, the two Supabase variables must be set **at build
-time** — Vite inlines them into the bundle, so changing them means a fresh
-deploy, not just a restart.
+| Script | |
+|---|---|
+| `npm run dev` | dev server |
+| `npm run build` | typecheck + production build |
+| `npm test` | Vitest unit tests |
+| `npm run typecheck` | types only |
 
-### Netlify
+## How the data fits together
 
-[`netlify.toml`](netlify.toml) already sets the base directory, build command,
-publish directory, SPA fallback redirect and cache headers.
+| Table | Holds |
+|---|---|
+| `od_accounts` | one row per OD; `expiry_date`, `current_limit` and `interest_rate` always reflect the current term |
+| `od_terms` | term #1 plus one row per renewal |
+| `od_transactions` | the ledger: `opening_balance`, `draw`, `repayment`, `interest`, `charge`, `closure_debit`, `adjustment` (only adjustments are signed) |
+| `od_events` | lifecycle timeline; workflows add rows, all editable |
+| `fixed_deposits`, `od_fd_links` | FDs and which OD(s) they secure |
+| `savings_accounts`, `branches`, `user_settings` | reference data; name and CIF for emails |
 
-1. **New site → Import an existing project**, and pick this repository.
-2. Netlify reads `netlify.toml`, so the build settings need no edits. If you are
-   configuring by hand: base `web`, build `npm run build`, publish `web/dist`.
-3. Under **Site configuration → Environment variables**, add `VITE_SUPABASE_URL`
-   and `VITE_SUPABASE_ANON_KEY`. Vite inlines these at build time, so a change
-   needs a redeploy to take effect.
-4. Deploy.
+`outstanding = Σ(opening_balance, draw, interest, charge) − Σ(repayment, closure_debit) + Σ(adjustment)`.
+Accrued interest estimate = outstanding × rate/100 × days since the last interest debit (or first draw) / 365.
 
-### Cloudflare Pages
+### Rules enforced by the database (and previewed in the UI)
 
-A free alternative with no build-minute metering on the free plan, which is
-useful if a Netlify billing cycle pauses production deploys.
+- A `draw` that would take outstanding above `current_limit` is rejected unless its notes contain "override".
+- No transactions on a closed OD dated after `closed_on`.
+- An OD can only be set to `closed` when its ledger nets to exactly 0.
 
-1. **Workers & Pages → Create → Pages → Connect to Git**, and pick this repository.
-2. Build settings:
-   - Framework preset: **None** (or Vite)
-   - Root directory: `web`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under the project's
-   environment variables, for the Production environment.
-4. Deploy. `_redirects` handles the SPA fallback; there is nothing to configure
-   for it.
+### Workflows (atomic Postgres functions, `SECURITY INVOKER` so RLS applies)
 
-### Afterwards, in Supabase
+| Function | Used by |
+|---|---|
+| `create_od` | **New OD**: OD + term #1 + FDs/links + `opened` event, then offers the first draw |
+| `request_closure` | **Closure wizard** step 3, for one or several ODs of a branch |
+| `mark_closed` | **Mark closed**: final interest + residual `closure_debit` (+ optional balancing adjustment), status `closed`, `closed` event |
+| `mark_lien_released` | sets `lien_released_on`, FDs `lien_marked = false`, `lien_released` event |
+| `record_renewal` | **Record auto-renewal**: new term, OD moves to the new expiry/limit/rate, `renewed` event; balance untouched |
+| `change_limit` | **Change limit**: OD + current term + `limit_change` event |
 
-Whichever host you land on, add the deployed origin under **Authentication →
-URL Configuration** (Site URL, and Redirect URLs) so email confirmation links
-return to the right place. Add `http://localhost:5173` too, for local
-development — the default Site URL is port 3000, which Vite does not use.
+### Alerts (`od_alerts`)
 
-## How it maps to the Android app
+`expiring_soon`, `expiry_passed_unhandled` (also covers `unconfirmed` ODs), `closure_pending` (7+ days),
+`lien_not_released`, `over_limit`, `missing_interest` (no interest debit for 40+ days while owing),
+`reconcile` (bank-reported balance differs by more than ₹1).
 
-| Android                                     | Web                                                |
-| ------------------------------------------- | -------------------------------------------------- |
-| Room `od_accounts` / `od_transactions`      | Postgres tables of the same names                   |
-| `OdAccountWithTransactions` computed fields | [`src/lib/domain.ts`](src/lib/domain.ts), unit tested |
-| `PdfGenerator.kt` (A4 Canvas)               | [`src/lib/closureLetter.ts`](src/lib/closureLetter.ts) (pdf-lib) |
-| `SharedPreferences("pdf_settings")`         | `letter_settings` table, one row per user           |
-| Epoch-millis dates                          | `date` columns and `YYYY-MM-DD` strings             |
-| Share sheet                                 | Browser download                                    |
+## Not built yet
 
-The arithmetic is unchanged: withdrawals and interest debits increase what is
-outstanding, repayments reduce it, available limit is the approved limit less
-outstanding floored at zero, and the portfolio card totals the active book only.
-
-Two deliberate differences:
-
-- **Dates are calendar dates, not instants.** An FD matures on a day, so
-  `fd_maturity_date` is a `date` column and "days to maturity" compares
-  midnight to midnight. The Android version divided a millisecond difference,
-  which drifted with the time of day the screen was opened.
-- **The letter paginates.** The Android version drew one page and ran off the
-  bottom if enough overdrafts were selected; this one starts a new page.
-
-## Tests
-
-```bash
-npm test
-```
-
-Covers the ported arithmetic (`domain.test.ts`), the display formatting
-including Indian lakh grouping (`format.test.ts`), and the closure letter —
-that it produces a real PDF, spills onto a second page for a long list, and
-survives blank settings (`closureLetter.test.ts`).
+The optional phase-2 email digest (Edge Function + pg_cron + Resend) is not included.

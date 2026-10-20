@@ -2,7 +2,7 @@
 
 A modern native Android application built with **Jetpack Compose**, **Kotlin**, and **Room Database** to track Overdrafts (ODs) taken against Fixed Deposits (FDs).
 
-There is also a **[web version](web/)** with the same features, backed by Supabase so the data follows you across devices.
+There is also a **[web app](web/)** (React + Supabase, deployed to GitHub Pages) that models the full OD lifecycle: ledger, renewals, closure emails and lien release.
 
 ## Features
 
@@ -57,17 +57,16 @@ Clone the repository and build the project using the Gradle wrapper:
 
 ## Web App
 
-[`web/`](web/) holds a React + TypeScript port that runs in the browser, stores data in
-Supabase (Postgres, with row-level security scoping every row to its owner) and deploys
-to Netlify as a static site. It carries the same overdraft arithmetic and the same bank
-closure request letter, and because the data lives server-side rather than in a local
-Room database, the same account opens on every device you sign in from.
+[`web/`](web/) holds a React + TypeScript SPA backed by Supabase (Postgres with row-level
+security) and deployed to GitHub Pages by [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+It tracks every OD with its pledged FDs, a per-OD ledger (draws, repayments, monthly
+interest), renewals, the closure email to the branch and lien release.
 
 ```bash
 cd web
 npm install
-cp .env.example .env.local   # add your Supabase URL and anon key
+cp .env.example .env.local   # add your Supabase URL and publishable key
 npm run dev
 ```
 
-See [`web/README.md`](web/README.md) for the Supabase schema setup and Netlify deployment steps.
+See [`web/README.md`](web/README.md) for the Supabase setup and deployment steps.

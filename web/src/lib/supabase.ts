@@ -1,29 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-/**
- * Whether the app has been pointed at a Supabase project yet. The UI checks
- * this first and shows setup instructions instead of a login form that could
- * only ever fail, which is the difference between "I forgot to set the env
- * vars" and "the app is broken".
- */
-export const isSupabaseConfigured = Boolean(url && anonKey)
+export const supabaseConfigured = Boolean(url && key)
 
-if (!isSupabaseConfigured) {
-  console.warn(
-    'VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set. ' +
-      'Copy web/.env.example to web/.env.local and fill in your project details.',
-  )
-}
-
-// The placeholder keeps createClient from throwing on a misconfigured build, so
-// the app can render its own setup screen rather than a blank page.
-export const supabase = createClient(url ?? 'http://localhost', anonKey ?? 'public-anon-key', {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
+// The publishable/anon key is designed for browsers; RLS limits it to the
+// signed-in user's own rows. Never put a service-role key here.
+export const supabase = createClient(url ?? 'http://localhost', key ?? 'missing-key', {
+  auth: { persistSession: true, autoRefreshToken: true },
 })
+
+/** Turn a PostgREST/Postgres error into something worth showing in a toast. */
+export function errorMessage(e: unknown): string {
+  if (!e) return 'Unknown error'
+  if (typeof e === 'string') return e
+  const err = e as { message?: string; details?: string; hint?: string; code?: string }
+  if (err.code === '23505') return 'That record already exists (duplicate account number?)'
+  if (err.code === '23503') return 'This record is still referenced elsewhere'
+  return [err.message, err.details].filter(Boolean).join(' — ') || 'Request failed'
+}

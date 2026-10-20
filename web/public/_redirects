@@ -1,7 +1,0 @@
-# Single-page app fallback: every route serves index.html so deep links
-# (/od/:id, /od/new, ...) survive a hard refresh.
-#
-# This file is understood by Netlify and Cloudflare Pages alike, which is why
-# the redirect lives here as well as in netlify.toml - it keeps the build
-# deployable on either host with no changes.
-/*  /index.html  200
