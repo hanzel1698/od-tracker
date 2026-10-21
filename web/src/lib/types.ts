@@ -1,4 +1,4 @@
-// Row shapes for the tables and views in supabase/migrations/0001_init.sql.
+// Row shapes for the tables and views in supabase/migrations/ (0001_init.sql, 0002_fd_tracker.sql).
 // Postgres numerics arrive from PostgREST as JSON numbers; dates as 'YYYY-MM-DD'.
 
 export type OdStatus = 'active' | 'closure_requested' | 'closed' | 'unconfirmed' | 'rejected'
@@ -103,16 +103,32 @@ export interface OdAccount {
   updated_at: string
 }
 
+export type DepositType = 'FD' | 'RD' | 'PPF'
+export const DEPOSIT_TYPES: DepositType[] = ['FD', 'RD', 'PPF']
+export const FD_STATUSES = ['active', 'rolled over', 'closed'] as const
+
 export interface FixedDeposit {
   id: number
   user_id: string
   fd_account_no: string
+  deposit_type: DepositType
+  variant: string | null
   principal: number | null
   interest_rate: number | null
   opened_on: string | null
   maturity_date: string | null
+  term_months: number | null
+  maturity_amount: number | null
+  current_value: number | null
+  value_as_of: string | null
+  branch_code: string | null
+  maturity_instruction: string | null
+  interest_payout: string | null
   lien_marked: boolean | null
+  lien_amount: number | null
+  installment_amount: number | null
   status: string | null
+  closed_on: string | null
   notes: string | null
   created_at: string
   updated_at: string

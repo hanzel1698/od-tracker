@@ -67,7 +67,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("OD Tracker") },
+                title = { Text("FDs & OD Tracker") },
                 actions = {
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "PDF Settings")

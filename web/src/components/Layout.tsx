@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAlerts } from '@/data/hooks'
-import { cx } from './ui'
+import { APP_NAME, cx } from './ui'
 
 const MAIN = [
   { to: '/', label: 'Dashboard', icon: '◫' },
@@ -33,14 +33,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const moreActive = MORE.some((m) => loc.pathname.startsWith(m.to))
 
   return (
-    <div className="min-h-dvh pb-20 md:pb-0">
+    <div className="min-h-dvh pb-20 lg:pb-0">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <NavLink to="/" className="flex items-center gap-2 font-bold">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-700 text-sm text-white">₹</span>
-            OD Tracker
+            <span className="whitespace-nowrap">{APP_NAME}</span>
           </NavLink>
-          <nav className="hidden flex-1 items-center gap-1 md:flex">
+          <nav className="hidden flex-1 items-center gap-1 lg:flex">
             {[...MAIN, ...MORE].map((n) => (
               <NavLink
                 key={n.to}
@@ -48,7 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 end={n.to === '/'}
                 className={({ isActive }) =>
                   cx(
-                    'rounded-lg px-2.5 py-1.5 text-sm font-medium',
+                    'rounded-lg px-2 py-1.5 text-sm font-medium whitespace-nowrap',
                     isActive ? 'bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
                   )
                 }
@@ -60,7 +60,7 @@ export function Layout({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap">
             <button onClick={toggleTheme} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="Toggle dark mode" aria-label="Toggle dark mode">
               <span className="dark:hidden">☾</span>
               <span className="hidden dark:inline">☀</span>
@@ -74,8 +74,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <main className="mx-auto max-w-7xl px-4 py-4 sm:py-6">{children}</main>
 
-      {/* Mobile bottom navigation */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden dark:border-slate-800 dark:bg-slate-950">
+      {/* Bottom navigation below lg, where the full top nav no longer fits beside the name */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-slate-800 dark:bg-slate-950">
         <div className="grid grid-cols-5">
           {MAIN.map((n) => (
             <NavLink

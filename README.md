@@ -1,4 +1,4 @@
-# OD Tracker
+# FDs & OD Tracker
 
 A modern native Android application built with **Jetpack Compose**, **Kotlin**, and **Room Database** to track Overdrafts (ODs) taken against Fixed Deposits (FDs).
 

@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { useAlerts, useBalances, useBranches, useLinkMaps, useOds, useSavings, useSettings, useSummary } from '@/data/hooks'
+import { useAlerts, useBalances, useBranches, useFds, useLinkMaps, useOds, useSavings, useSettings, useSummary } from '@/data/hooks'
 import { Button, Card, EmptyState, Kpi, PageHeader, Skeleton, copyText } from '@/components/ui'
-import { formatDate, formatINR, plural } from '@/lib/format'
+import { formatDate, formatINR, plural, todayISO } from '@/lib/format'
+import { summarizeDeposits } from '@/lib/deposits'
 import { followUpEmail } from '@/lib/closureEmail'
 import type { AlertType, OdAlert } from '@/lib/types'
 import { useOdDialogs } from '@/features/ods/OdDialogs'
@@ -65,6 +66,8 @@ export function Dashboard() {
         )}
       </div>
 
+      <DepositsCard />
+
       <Card title={`Needs attention${alerts.data?.length ? ` (${alerts.data.length})` : ''}`}>
         {alerts.isLoading ? (
           <div className="space-y-2">
@@ -95,6 +98,45 @@ export function Dashboard() {
       <Card title="Outstanding vs limit (active ODs)">
         <OutstandingChart />
       </Card>
+    </div>
+  )
+}
+
+/** Deposit portfolio at a glance: what's tied up as lien and what's free for a new OD. */
+function DepositsCard() {
+  const fds = useFds()
+  if (fds.isLoading) return <Skeleton className="h-28" />
+  if (!fds.data?.length) return null
+  const s = summarizeDeposits(fds.data, todayISO())
+  return (
+    <Card
+      title="Deposits"
+      actions={
+        <Link to="/fds" className="text-sm text-blue-600 hover:underline">
+          All deposits →
+        </Link>
+      }
+    >
+      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+        <Stat label={`Value now (${s.count})`} value={formatINR(s.value, { whole: true })} sub={`${formatINR(s.maturityValue, { whole: true })} at maturity`} />
+        <Stat label={`Under lien (${s.lienCount})`} value={formatINR(s.lienValue, { whole: true })} />
+        <Stat label={`Free (${s.freeCount})`} value={formatINR(s.freeValue, { whole: true })} sub="available for new ODs" />
+        <Stat
+          label={`Maturing in 30 days (${s.dueSoonCount})`}
+          value={formatINR(s.dueSoonValue, { whole: true })}
+          sub={s.maturedCount ? <span className="text-red-600">{plural(s.maturedCount, 'deposit')} past maturity</span> : undefined}
+        />
+      </div>
+    </Card>
+  )
+}
+
+function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="num mt-0.5 text-lg font-bold">{value}</div>
+      {sub && <div className="text-xs text-slate-500 dark:text-slate-400">{sub}</div>}
     </div>
   )
 }

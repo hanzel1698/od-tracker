@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { supabase, supabaseConfigured } from '@/lib/supabase'
-import { Button, Field } from '@/components/ui'
+import { APP_NAME, Button, Field } from '@/components/ui'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -36,8 +36,8 @@ export function Login() {
       <div className="card w-full max-w-sm p-6">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-700 text-2xl font-bold text-white">₹</div>
-          <h1 className="text-xl font-bold">OD Tracker</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Overdrafts against fixed deposits</p>
+          <h1 className="text-xl font-bold">{APP_NAME}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Fixed deposits and the overdrafts against them</p>
         </div>
         {!supabaseConfigured && (
           <p className="mb-4 rounded-lg bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">

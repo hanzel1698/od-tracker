@@ -11,6 +11,9 @@ import {
 import type { OdStatus } from '@/lib/types'
 import { formatINR, humanize } from '@/lib/format'
 
+/** Display name only; the package name and the /od-tracker/ URL stay as they are. */
+export const APP_NAME = 'FDs & OD Tracker'
+
 export function cx(...c: Array<string | false | null | undefined>) {
   return c.filter(Boolean).join(' ')
 }

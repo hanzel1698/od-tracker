@@ -12,6 +12,7 @@ interface Item {
   label: string
   to: string
   amount?: number
+  lien?: boolean
 }
 
 /** OD expiries and FD maturities over the next 90 days, on a single scale. */
@@ -36,7 +37,14 @@ export function ExpiryTimeline() {
       })),
     ...fds
       .filter((f) => f.status !== 'closed' && f.maturity_date && f.maturity_date >= today && f.maturity_date <= end)
-      .map((f) => ({ date: f.maturity_date!, kind: 'FD maturity' as const, label: f.fd_account_no, to: `/fds/${f.id}` })),
+      .map((f) => ({
+        date: f.maturity_date!,
+        kind: 'FD maturity' as const,
+        label: f.fd_account_no,
+        to: `/fds/${f.id}`,
+        amount: f.maturity_amount ?? undefined,
+        lien: !!f.lien_marked,
+      })),
   ].sort((a, b) => a.date.localeCompare(b.date))
 
   if (!items.length) return <EmptyState title="Nothing due in the next 90 days" />
@@ -77,12 +85,16 @@ export function ExpiryTimeline() {
               <Link to={it.to} className="font-mono text-blue-700 hover:underline dark:text-blue-400">
                 {it.label}
               </Link>
-              <span className="ml-2 text-xs text-slate-500">{it.kind}</span>
+              <span className="ml-2 text-xs text-slate-500">
+                {it.kind}
+                {it.kind === 'FD maturity' && (it.lien ? ' · lien' : ' · free')}
+              </span>
             </div>
             <div className="text-right">
               <div className="whitespace-nowrap">{formatDate(it.date)}</div>
               <div className="text-xs text-slate-500">
-                in {differenceInCalendarDays(parseISO(it.date), parseISO(today))}d{it.amount ? ` · owe ${formatINR(it.amount, { whole: true })}` : ''}
+                in {differenceInCalendarDays(parseISO(it.date), parseISO(today))}d
+                {it.amount ? ` · ${it.kind === 'OD expiry' ? 'owe' : 'pays'} ${formatINR(it.amount, { whole: true })}` : ''}
               </div>
             </div>
           </li>

@@ -1,8 +1,9 @@
-# OD Tracker (web)
+# FDs & OD Tracker (web)
 
-A personal web app for SBI overdrafts taken against fixed deposits. It tracks every
-OD, the FDs under lien, a money ledger per OD, and each OD's lifecycle: opened → drawn
-→ renewed (possibly many times) → closure requested → closed → lien released.
+A personal web app for SBI fixed deposits and the overdrafts taken against them. It tracks
+every deposit (FDs, RDs, PPF: value, maturity, lien), every OD with a money ledger, and
+each OD's lifecycle: opened → drawn → renewed (possibly many times) → closure requested →
+closed → lien released.
 
 Static React SPA on GitHub Pages, data in Supabase (Postgres + Auth), every table
 fenced by row-level security.
@@ -21,6 +22,8 @@ React Hook Form + Zod · React Router (`HashRouter`) · date-fns · Recharts · 
 2. **SQL Editor** → paste [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → **Run**.
    It creates the enums, tables, RLS policies, integrity triggers, the
    `od_balances` / `od_alerts` / `od_summary` views and the workflow functions.
+3. Then run [`supabase/migrations/0002_fd_tracker.sql`](supabase/migrations/0002_fd_tracker.sql),
+   which adds the deposit columns (type, current value, maturity amount, lien amount…) the FDs page uses.
 
 ### 2. Sign up, then disable sign-ups
 

@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { useDelete, useFds, useInsert, useLinks, useUpdate } from '@/data/hooks'
 import { Button, Card, EmptyState, Field, useConfirm } from '@/components/ui'
 import { EditableCell } from '@/components/EditableCell'
-import type { FixedDeposit, OdAccount } from '@/lib/types'
+import { FD_STATUSES, type FixedDeposit, type OdAccount } from '@/lib/types'
+import { depositValue, isOpenDeposit } from '@/lib/deposits'
+import { formatDate, formatINR } from '@/lib/format'
 import { useOdDialogs } from './OdDialogs'
 
 export function LinkedFds({ od }: { od: OdAccount }) {
@@ -11,7 +13,10 @@ export function LinkedFds({ od }: { od: OdAccount }) {
   const links = useLinks().data ?? []
   const linkedIds = new Set(links.filter((l) => l.od_id === od.id).map((l) => l.fd_id))
   const linked = fds.filter((f) => linkedIds.has(f.id))
-  const others = fds.filter((f) => !linkedIds.has(f.id))
+  // Only deposits that could secure this OD: open, free and not already linked.
+  const others = fds
+    .filter((f) => !linkedIds.has(f.id) && isOpenDeposit(f) && !f.lien_marked)
+    .sort((a, b) => (a.maturity_date ?? '').localeCompare(b.maturity_date ?? ''))
   const addLink = useInsert('od_fd_links')
   const unlink = useDelete('od_fd_links')
   const insertFd = useInsert('fixed_deposits', { silent: true })
@@ -86,7 +91,7 @@ export function LinkedFds({ od }: { od: OdAccount }) {
                     />
                   </td>
                   <td className="td">
-                    <EditableCell kind="select" options={['active', 'rolled over', 'closed']} value={f.status} onSave={save(f, 'status')} />
+                    <EditableCell kind="select" options={FD_STATUSES} value={f.status} onSave={save(f, 'status')} />
                   </td>
                   <td className="td text-right">
                     <Button
@@ -109,13 +114,14 @@ export function LinkedFds({ od }: { od: OdAccount }) {
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <div className="mb-2 text-sm font-medium">Link an existing FD</div>
+          <div className="mb-2 text-sm font-medium">Link a free FD</div>
           <div className="flex gap-2">
             <select className="input" value={pick} onChange={(e) => setPick(e.target.value)}>
               <option value="">Choose…</option>
               {others.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.fd_account_no}
+                  {f.fd_account_no} · {formatINR(depositValue(f), { whole: true })}
+                  {f.maturity_date ? ` · matures ${formatDate(f.maturity_date)}` : ''}
                 </option>
               ))}
             </select>

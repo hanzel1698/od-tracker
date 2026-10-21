@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "Track SBI overdrafts against fixed deposits: ledger, renewals, closures and lien release.",
+  "description": "Track SBI fixed deposits and the overdrafts against them: ledger, renewals, closures, lien release and maturities.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
