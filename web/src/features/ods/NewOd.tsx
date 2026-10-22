@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { addDays, format, parseISO } from 'date-fns'
-import { useBranches, useDefaultSavings, useInsert, useRpc, useSavings, useSettings } from '@/data/hooks'
+import { useBranches, useDefaultSavings, useFds, useInsert, useRpc, useSavings, useSettings } from '@/data/hooks'
 import { Button, Card, Field, Modal, PageHeader } from '@/components/ui'
-import { formatINR, todayISO } from '@/lib/format'
-import { renewalExpiry } from '@/lib/calc'
+import { formatDate, formatINR, todayISO } from '@/lib/format'
+import { renewalExpiry, round2 } from '@/lib/calc'
+import { depositValue, isOpenDeposit } from '@/lib/deposits'
 import { OD_CHANNELS } from '@/lib/types'
 
 const blank = (v: unknown) => (v === '' ? null : v)
@@ -25,6 +26,8 @@ const schema = z.object({
   notes: z.string().optional(),
   fds: z.array(
     z.object({
+      // Set when the row was filled from an existing free FD; create_od then links that record.
+      fd_id: z.number().nullable().optional(),
       fd_account_no: z.string().trim().min(1, 'FD no. required'),
       principal: z.preprocess(blank, z.coerce.number().nullable()),
       interest_rate: z.preprocess(blank, z.coerce.number().nullable()),
@@ -33,6 +36,7 @@ const schema = z.object({
   ),
 })
 type Form = z.infer<typeof schema>
+const blankFd: Form['fds'][number] = { fd_id: null, fd_account_no: '', principal: null, interest_rate: null, maturity_date: '' }
 
 export function NewOd() {
   const nav = useNavigate()
@@ -40,6 +44,10 @@ export function NewOd() {
   const savings = useSavings().data ?? []
   const defSav = useDefaultSavings()
   const settings = useSettings().data
+  // Deposits that could secure the new OD: open and not already under lien.
+  const freeFds = (useFds().data ?? [])
+    .filter((f) => isOpenDeposit(f) && !f.lien_marked)
+    .sort((a, b) => (a.maturity_date ?? '').localeCompare(b.maturity_date ?? ''))
   const create = useRpc<Record<string, unknown>, number>('create_od', 'OD created')
   const insertTxn = useInsert('od_transactions')
   const [created, setCreated] = useState<{ id: number; limit: number; savingsId: number | null; date: string } | null>(null)
@@ -53,10 +61,21 @@ export function NewOd() {
       channel: 'YONO',
       branch_code: branches[0]?.code ?? '',
       savings_account_id: defSav?.id ?? null,
-      fds: [{ fd_account_no: '', principal: null, interest_rate: null, maturity_date: '' }],
+      fds: [{ ...blankFd }],
     },
   })
   const fds = useFieldArray({ control, name: 'fds' })
+  const fdRows = useWatch({ control, name: 'fds' }) ?? []
+  const fdTotal = round2(fdRows.reduce((s, r) => s + (Number(r?.principal) || 0), 0))
+
+  /** Fill row i from a free FD, or clear it back to a blank, hand-entered FD. */
+  const pickFd = (i: number, id: string) => {
+    const fd = freeFds.find((f) => f.id === Number(id))
+    const row = fd
+      ? { fd_id: fd.id, fd_account_no: fd.fd_account_no, principal: fd.principal, interest_rate: fd.interest_rate, maturity_date: fd.maturity_date ?? '' }
+      : blankFd
+    for (const [k, v] of Object.entries(row)) setValue(`fds.${i}.${k as keyof typeof row}`, v as never, { shouldValidate: k === 'fd_account_no' && !!fd })
+  }
 
   // Lists may arrive after the first render; fill the defaults once they do.
   useEffect(() => {
@@ -75,7 +94,7 @@ export function NewOd() {
         reminder_days: settings?.default_reminder_days ?? 21,
         savings_account_id: od.savings_account_id ?? defSav?.id ?? null,
       },
-      p_fds: fdRows.map((x) => ({ ...x, maturity_date: x.maturity_date || null, opened_on: od.opened_on })),
+      p_fds: fdRows.map(({ fd_id: _, ...x }) => ({ ...x, maturity_date: x.maturity_date || null, opened_on: od.opened_on })),
     })
     setCreated({ id, limit: od.sanctioned_limit, savingsId: od.savings_account_id ?? defSav?.id ?? null, date: od.opened_on })
   }
@@ -98,7 +117,11 @@ export function NewOd() {
             <Field label="Opening date" error={formState.errors.opened_on?.message}>
               <input type="date" className="input" {...register('opened_on')} />
             </Field>
-            <Field label="Sanctioned limit (₹)" error={formState.errors.sanctioned_limit?.message} hint="Usually about 90% of the FD">
+            <Field
+              label="Sanctioned limit (₹)"
+              error={formState.errors.sanctioned_limit?.message}
+              hint={fdTotal > 0 ? `Usually about 90% of the FD: ${formatINR(round2(fdTotal * 0.9), { whole: true })}` : 'Usually about 90% of the FD'}
+            >
               <input className="input num" inputMode="decimal" {...register('sanctioned_limit')} />
             </Field>
             <Field label="Interest rate (% p.a.)" error={formState.errors.interest_rate?.message}>
@@ -151,33 +174,56 @@ export function NewOd() {
         <Card
           title="Fixed deposit(s) under lien"
           actions={
-            <Button size="sm" variant="secondary" onClick={() => fds.append({ fd_account_no: '', principal: null, interest_rate: null, maturity_date: '' })}>
+            <Button size="sm" variant="secondary" onClick={() => fds.append({ ...blankFd })}>
               + Another FD
             </Button>
           }
         >
           <div className="space-y-3">
-            {fds.fields.map((f, i) => (
-              <div key={f.id} className="grid grid-cols-2 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]">
-                <div className="col-span-2 sm:col-span-1">
-                  <Field label="FD no." error={formState.errors.fds?.[i]?.fd_account_no?.message}>
-                    <input className="input font-mono" {...register(`fds.${i}.fd_account_no`)} />
-                  </Field>
+            {fds.fields.map((f, i) => {
+              const pickedId = fdRows[i]?.fd_id ?? null
+              // A picked FD's details come from its record; edit them on the FD itself.
+              const locked = pickedId != null
+              const takenElsewhere = new Set(fdRows.filter((_, j) => j !== i).map((r) => r?.fd_id))
+              return (
+                <div key={f.id} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  {freeFds.length > 0 && (
+                    <Field label="Free FD">
+                      <select className="input" value={pickedId ?? ''} onChange={(e) => pickFd(i, e.target.value)}>
+                        <option value="">New FD (enter details below)</option>
+                        {freeFds
+                          .filter((d) => !takenElsewhere.has(d.id))
+                          .map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.fd_account_no} · {formatINR(depositValue(d), { whole: true })}
+                              {d.maturity_date ? ` · matures ${formatDate(d.maturity_date)}` : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+                    <div className="col-span-2 sm:col-span-1">
+                      <Field label="FD no." error={formState.errors.fds?.[i]?.fd_account_no?.message}>
+                        <input className="input font-mono" readOnly={locked} {...register(`fds.${i}.fd_account_no`)} />
+                      </Field>
+                    </div>
+                    <Field label="Principal">
+                      <input className="input num" inputMode="decimal" readOnly={locked} {...register(`fds.${i}.principal`)} />
+                    </Field>
+                    <Field label="Rate %">
+                      <input className="input num" inputMode="decimal" readOnly={locked} {...register(`fds.${i}.interest_rate`)} />
+                    </Field>
+                    <Field label="Maturity">
+                      <input type="date" className="input" readOnly={locked} {...register(`fds.${i}.maturity_date`)} />
+                    </Field>
+                    <button type="button" className="self-end pb-2 text-slate-400 hover:text-red-600" onClick={() => fds.remove(i)} title="Remove">
+                      ✕
+                    </button>
+                  </div>
                 </div>
-                <Field label="Principal">
-                  <input className="input num" inputMode="decimal" {...register(`fds.${i}.principal`)} />
-                </Field>
-                <Field label="Rate %">
-                  <input className="input num" inputMode="decimal" {...register(`fds.${i}.interest_rate`)} />
-                </Field>
-                <Field label="Maturity">
-                  <input type="date" className="input" {...register(`fds.${i}.maturity_date`)} />
-                </Field>
-                <button type="button" className="self-end pb-2 text-slate-400 hover:text-red-600" onClick={() => fds.remove(i)} title="Remove">
-                  ✕
-                </button>
-              </div>
-            ))}
+              )
+            })}
             {!fds.fields.length && <p className="text-sm text-slate-500">No FD (you can link one later).</p>}
           </div>
         </Card>
