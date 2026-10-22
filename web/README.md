@@ -24,6 +24,8 @@ React Hook Form + Zod · React Router (`HashRouter`) · date-fns · Recharts · 
    `od_balances` / `od_alerts` / `od_summary` views and the workflow functions.
 3. Then run [`supabase/migrations/0002_fd_tracker.sql`](supabase/migrations/0002_fd_tracker.sql),
    which adds the deposit columns (type, current value, maturity amount, lien amount…) the FDs page uses.
+4. Then run [`supabase/migrations/0003_branch_address.sql`](supabase/migrations/0003_branch_address.sql),
+   which adds the branch address that heads the closure letter (Close OD(s) → Email → **Download letter (PDF)**).
 
 ### 2. Sign up, then disable sign-ups
 

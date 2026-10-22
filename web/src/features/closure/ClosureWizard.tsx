@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
+import { format, parseISO } from 'date-fns'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useBalances, useBranches, useInsert, useLinkMaps, useOds, useRpc, useSavings, useSettings } from '@/data/hooks'
 import { Button, Card, EmptyState, Field, PageHeader, StatusChip, copyText, cx } from '@/components/ui'
 import { buildClosureEmail } from '@/lib/closureEmail'
+import { letterFileName } from '@/lib/closureLetter'
+import { closureLetterPdf } from '@/lib/closureLetterPdf'
 import { formatDate, formatINR, todayISO } from '@/lib/format'
 
 type Step = 1 | 2 | 3
@@ -47,6 +50,24 @@ export function ClosureWizard() {
       }),
     [branch, sav, settings, chosen, fdsByOd],
   )
+
+  const downloadLetter = async () => {
+    try {
+      const doc = await closureLetterPdf({
+        bank: first?.bank ?? 'SBI',
+        branchName: branch?.name ?? '',
+        branchAddress: branch?.address ?? '',
+        name: settings?.full_name ?? '',
+        cif: settings?.cif_no ?? '',
+        savingsAccountNo: sav?.account_no ?? '',
+        items: chosen.map((o) => ({ odNo: o.od_account_no, fdNos: (fdsByOd.get(o.id) ?? []).map((f) => f.fd_account_no) })),
+        date: format(parseISO(today), 'd MMM yyyy'),
+      })
+      doc.save(letterFileName(chosen.map((o) => o.od_account_no)))
+    } catch (e) {
+      toast.error(`Could not make the letter: ${e instanceof Error ? e.message : e}`)
+    }
+  }
 
   const toggle = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
   const amountFor = (id: number) => amounts[id] ?? String(Math.max(bal(id)?.outstanding ?? 0, 0))
@@ -148,9 +169,13 @@ export function ClosureWizard() {
 
       {step === 2 && (
         <Card title="Closure email">
-          {(!branch?.email || !settings?.full_name || !settings?.cif_no || !sav) && (
+          {(!branch?.email || !branch?.address || !settings?.full_name || !settings?.cif_no || !sav) && (
             <p className="mb-3 rounded-lg bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-              Missing: {[!branch?.email && 'branch email', !settings?.full_name && 'your name', !settings?.cif_no && 'CIF', !sav && 'savings account'].filter(Boolean).join(', ')}.{' '}
+              Missing:{' '}
+              {[!branch?.email && 'branch email', !branch?.address && 'branch address (for the letter)', !settings?.full_name && 'your name', !settings?.cif_no && 'CIF', !sav && 'savings account']
+                .filter(Boolean)
+                .join(', ')}
+              .{' '}
               <Link to="/settings" className="underline">
                 Settings
               </Link>{' '}
@@ -168,6 +193,7 @@ export function ClosureWizard() {
               <span className="text-slate-500">Subject:</span> {email.subject}
             </div>
             <pre className="rounded-lg bg-slate-100 p-3 font-sans whitespace-pre-wrap dark:bg-slate-800">{email.body}</pre>
+            <p className="text-xs text-slate-500">The PDF is the same request as a signed letter, dated today; attach it to the email or print it for the branch.</p>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={async () => (await copyText(email.full)) && toast.success('Email copied')}>
@@ -176,6 +202,9 @@ export function ClosureWizard() {
             <a href={email.mailto}>
               <Button variant="secondary">Open in mail app</Button>
             </a>
+            <Button variant="secondary" disabled={!chosen.length} onClick={downloadLetter}>
+              Download letter (PDF)
+            </Button>
             <Button onClick={() => setStep(3)}>Next</Button>
           </div>
         </Card>

@@ -1,4 +1,4 @@
-// Row shapes for the tables and views in supabase/migrations/ (0001_init.sql, 0002_fd_tracker.sql).
+// Row shapes for the tables and views in supabase/migrations/ (0001_init.sql, 0002_fd_tracker.sql, 0003_branch_address.sql).
 // Postgres numerics arrive from PostgREST as JSON numbers; dates as 'YYYY-MM-DD'.
 
 export type OdStatus = 'active' | 'closure_requested' | 'closed' | 'unconfirmed' | 'rejected'
@@ -72,6 +72,7 @@ export interface Branch {
   name: string
   email: string | null
   phone: string | null
+  address: string | null
 }
 
 export interface OdAccount {

@@ -7,7 +7,7 @@ export function BranchList() {
   const q = useBranches()
   return (
     <div>
-      <PageHeader title="Branches" subtitle="Closure emails go to the branch email of the OD's home branch." />
+      <PageHeader title="Branches" subtitle="Closure emails go to the branch email of the OD's home branch; the address heads the closure letter." />
       <CrudTable<Branch>
         table="branches"
         rows={q.data ?? []}
@@ -19,6 +19,7 @@ export function BranchList() {
           { key: 'name', label: 'Name', required: true },
           { key: 'email', label: 'Email' },
           { key: 'phone', label: 'Phone' },
+          { key: 'address', label: 'Address' },
         ]}
       />
     </div>
