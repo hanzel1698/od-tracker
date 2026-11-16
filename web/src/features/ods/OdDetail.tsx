@@ -1,7 +1,11 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useBalances, useBranches, useDelete, useOds } from '@/data/hooks'
+import { format, parseISO } from 'date-fns'
+import { toast } from 'sonner'
+import { useBalances, useBranches, useDelete, useLinkMaps, useOds, useSavings, useSettings } from '@/data/hooks'
 import { Button, EmptyState, Meter, SkeletonRows, StatusChip, Tabs, useConfirm, cx } from '@/components/ui'
-import { formatDate, formatINR, formatPct } from '@/lib/format'
+import { letterFileName } from '@/lib/closureLetter'
+import { closureLetterPdf } from '@/lib/closureLetterPdf'
+import { formatDate, formatINR, formatPct, todayISO } from '@/lib/format'
 import { useOdDialogs } from './OdDialogs'
 import { OdForm } from './OdForm'
 import { LedgerTab } from './LedgerTab'
@@ -23,6 +27,30 @@ export function OdDetail() {
   const del = useDelete('od_accounts')
   const confirm = useConfirm()
   const nav = useNavigate()
+  const savings = useSavings().data ?? []
+  const settings = useSettings().data
+  const { fdsByOd } = useLinkMaps()
+
+  const downloadLetter = async () => {
+    if (!od) return
+    try {
+      const sav = savings.find((s) => s.id === od.savings_account_id) ?? savings.find((s) => s.is_default)
+      const doc = await closureLetterPdf({
+        bank: od.bank ?? 'SBI',
+        branchName: branch?.name ?? '',
+        branchAddress: branch?.address ?? '',
+        name: settings?.full_name ?? '',
+        cif: settings?.cif_no ?? '',
+        savingsAccountNo: sav?.account_no ?? '',
+        items: [{ odNo: od.od_account_no, fdNos: (fdsByOd.get(od.id) ?? []).map((f) => f.fd_account_no) }],
+        // Re-issue the original request, so keep its date.
+        date: format(parseISO(od.closure_requested_on ?? todayISO()), 'd MMM yyyy'),
+      })
+      doc.save(letterFileName([od.od_account_no]))
+    } catch (e) {
+      toast.error(`Could not make the letter: ${e instanceof Error ? e.message : e}`)
+    }
+  }
 
   if (ods.isLoading) return <SkeletonRows rows={6} />
   if (!od) return <EmptyState title="OD not found"><Link to="/ods" className="text-blue-600 underline">Back to list</Link></EmptyState>
@@ -73,6 +101,11 @@ export function OdDetail() {
             {od.status === 'closure_requested' && (
               <Button size="sm" variant="secondary" onClick={() => dialogs.open({ kind: 'renewal', odId: od.id })}>
                 It was renewed instead
+              </Button>
+            )}
+            {od.status === 'closure_requested' && (
+              <Button size="sm" variant="secondary" onClick={downloadLetter}>
+                Download closure letter
               </Button>
             )}
             {od.status === 'closed' && !od.lien_released_on && (
