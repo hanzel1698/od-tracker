@@ -19,6 +19,7 @@ export type TxnType =
   | 'interest'
   | 'charge'
   | 'closure_debit'
+  | 'closure_credit'
   | 'adjustment'
 
 export const OD_STATUSES: OdStatus[] = ['active', 'closure_requested', 'closed', 'unconfirmed', 'rejected']
@@ -40,6 +41,7 @@ export const TXN_TYPES: TxnType[] = [
   'interest',
   'charge',
   'closure_debit',
+  'closure_credit',
   'adjustment',
 ]
 

@@ -24,6 +24,7 @@ describe('balance', () => {
     expect(signedAmount('charge', 100)).toBe(100)
     expect(signedAmount('repayment', 100)).toBe(-100)
     expect(signedAmount('closure_debit', 100)).toBe(-100)
+    expect(signedAmount('closure_credit', 100)).toBe(100)
     expect(signedAmount('adjustment', -25)).toBe(-25)
     expect(signedAmount('adjustment', 25)).toBe(25)
   })

@@ -63,6 +63,7 @@ const TXN_LABEL: Record<TxnType, string> = {
   interest: 'Interest debit',
   charge: 'Charge',
   closure_debit: 'Closure debit',
+  closure_credit: 'Closure credit (refund)',
   adjustment: 'Adjustment (signed)',
 }
 export const txnLabel = (t: TxnType) => TXN_LABEL[t]
@@ -115,7 +116,7 @@ function TxnDialog({ odId, type, txn, onClose }: { odId: number; type?: TxnType;
   const drawCheck =
     w.txn_type === 'draw' ? checkDraw({ outstanding: after - amt, limit: od?.current_limit, amount: amt, notes: w.notes }) : null
   const closedAfter = od?.status === 'closed' && od.closed_on && w.txn_date > od.closed_on
-  const counter = ['draw', 'repayment', 'closure_debit', 'opening_balance'].includes(w.txn_type)
+  const counter = ['draw', 'repayment', 'closure_debit', 'closure_credit', 'opening_balance'].includes(w.txn_type)
 
   const onSubmit = async (f: TxnForm) => {
     const row = {
@@ -431,14 +432,14 @@ function MarkClosedDialog({ odId, onClose, onDone }: { odId: number; onClose: ()
         <Field label="Final interest debited by bank" hint={`Estimate since last debit: ${formatINR(est)}`}>
           <input className="input num" inputMode="decimal" value={interest} onChange={(e) => setInterest(e.target.value)} />
         </Field>
-        <Field label="Residual debited from savings" hint="Amount the bank took from savings to close it">
+        <Field label="Residual settled with savings" hint="Taken from savings to close it; negative if the bank refunded a credit balance">
           <input className="input num" inputMode="decimal" value={residual} onChange={(e) => setResidual(e.target.value)} />
         </Field>
       </div>
       <div className="mt-3 rounded-lg bg-slate-100 p-3 text-sm dark:bg-slate-800">
         <Row label="Outstanding in ledger" value={owed} />
         <Row label="+ final interest" value={i} />
-        <Row label="− residual debit" value={r} />
+        <Row label={r < 0 ? "+ refund to savings" : "− residual debit"} value={Math.abs(r)} />
         <div className="mt-1 border-t border-slate-300 pt-1 dark:border-slate-700">
           <Row label="Left after closure" value={diff} bold />
         </div>

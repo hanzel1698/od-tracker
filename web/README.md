@@ -26,6 +26,8 @@ React Hook Form + Zod · React Router (`HashRouter`) · date-fns · Recharts · 
    which adds the deposit columns (type, current value, maturity amount, lien amount…) the FDs page uses.
 4. Then run [`supabase/migrations/0003_branch_address.sql`](supabase/migrations/0003_branch_address.sql),
    which adds the branch address that heads the closure letter (Close OD(s) → Email → **Download letter (PDF)**).
+5. Then run [`supabase/migrations/0004_closure_credit.sql`](supabase/migrations/0004_closure_credit.sql),
+   which adds the `closure_credit` type for a credit balance the bank refunds to savings at closure.
 
 ### 2. Sign up, then disable sign-ups
 
@@ -77,12 +79,12 @@ Never commit `.env*` files, and never use the `service_role` / secret key in the
 |---|---|
 | `od_accounts` | one row per OD; `expiry_date`, `current_limit` and `interest_rate` always reflect the current term |
 | `od_terms` | term #1 plus one row per renewal |
-| `od_transactions` | the ledger: `opening_balance`, `draw`, `repayment`, `interest`, `charge`, `closure_debit`, `adjustment` (only adjustments are signed) |
+| `od_transactions` | the ledger: `opening_balance`, `draw`, `repayment`, `interest`, `charge`, `closure_debit`, `closure_credit` (leftover credit refunded to savings), `adjustment` (only adjustments are signed) |
 | `od_events` | lifecycle timeline; workflows add rows, all editable |
 | `fixed_deposits`, `od_fd_links` | FDs and which OD(s) they secure |
 | `savings_accounts`, `branches`, `user_settings` | reference data; name and CIF for emails |
 
-`outstanding = Σ(opening_balance, draw, interest, charge) − Σ(repayment, closure_debit) + Σ(adjustment)`.
+`outstanding = Σ(opening_balance, draw, interest, charge, closure_credit) − Σ(repayment, closure_debit) + Σ(adjustment)`.
 Accrued interest estimate = outstanding × rate/100 × days since the last interest debit (or first draw) / 365.
 
 ### Rules enforced by the database (and previewed in the UI)
@@ -97,7 +99,7 @@ Accrued interest estimate = outstanding × rate/100 × days since the last inter
 |---|---|
 | `create_od` | **New OD**: OD + term #1 + FDs/links + `opened` event, then offers the first draw |
 | `request_closure` | **Closure wizard** step 3, for one or several ODs of a branch |
-| `mark_closed` | **Mark closed**: final interest + residual `closure_debit` (+ optional balancing adjustment), status `closed`, `closed` event |
+| `mark_closed` | **Mark closed**: final interest + residual `closure_debit`, or `closure_credit` when the residual is negative (+ optional balancing adjustment), status `closed`, `closed` event |
 | `mark_lien_released` | sets `lien_released_on`, FDs `lien_marked = false`, `lien_released` event |
 | `record_renewal` | **Record auto-renewal**: new term, OD moves to the new expiry/limit/rate, `renewed` event; balance untouched |
 | `change_limit` | **Change limit**: OD + current term + `limit_change` event |
